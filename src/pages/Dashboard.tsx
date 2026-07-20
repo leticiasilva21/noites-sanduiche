@@ -1,5 +1,16 @@
 import { useMemo, useState } from "react";
-import { Sandwich, RefreshCw, ExternalLink, LogOut, X, Undo2, Loader2 } from "lucide-react";
+import {
+  Sandwich,
+  RefreshCw,
+  ExternalLink,
+  LogOut,
+  X,
+  Undo2,
+  Loader2,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown,
+} from "lucide-react";
 import logoWhite from "../assets/logo-white.png";
 import {
   useSandwichNights,
@@ -9,6 +20,9 @@ import {
 } from "../hooks/useSandwichData";
 
 type PeriodKey = "hoje" | "7d" | "30d" | "custom";
+type StatusFilter = "all" | SandwichNightRow["status"];
+type SortKey = "nome_interno" | "calendar_date" | "base_rate_2n" | "applied_price" | "status";
+type SortDirection = "asc" | "desc";
 
 function isoDate(d: Date): string {
   return d.toISOString().slice(0, 10);
@@ -68,6 +82,40 @@ function KpiCard({
   );
 }
 
+function SortableHeader({
+  label,
+  sortKey,
+  activeKey,
+  direction,
+  onSort,
+  align = "left",
+}: {
+  label: string;
+  sortKey: SortKey;
+  activeKey: SortKey;
+  direction: SortDirection;
+  onSort: (key: SortKey) => void;
+  align?: "left" | "right" | "center";
+}) {
+  const isActive = sortKey === activeKey;
+  const Icon = isActive ? (direction === "asc" ? ArrowUp : ArrowDown) : ArrowUpDown;
+  const alignClass = align === "right" ? "text-right" : align === "center" ? "text-center" : "text-left";
+  const justifyClass = align === "right" ? "justify-end" : align === "center" ? "justify-center" : "justify-start";
+  return (
+    <th className={`px-4 py-2 font-medium ${alignClass}`}>
+      <button
+        onClick={() => onSort(sortKey)}
+        className={`flex items-center gap-1 ${justifyClass} w-full text-xs font-medium transition ${
+          isActive ? "text-[var(--cd-navy)]" : "text-[var(--cd-muted)] hover:text-[var(--cd-navy)]"
+        }`}
+      >
+        {label}
+        <Icon className={`h-3 w-3 ${isActive ? "opacity-100" : "opacity-40"}`} />
+      </button>
+    </th>
+  );
+}
+
 const inputClass =
   "rounded-lg border border-[var(--cd-border)] bg-white px-3 py-2 text-sm text-[var(--cd-fg)] outline-none focus:border-[var(--cd-orange)] focus:ring-1 focus:ring-[var(--cd-orange)]";
 
@@ -80,10 +128,24 @@ export function Dashboard({ userEmail, onSignOut }: DashboardProps) {
   const [periodKey, setPeriodKey] = useState<PeriodKey>("7d");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
+  const [checkinFrom, setCheckinFrom] = useState("");
+  const [checkinTo, setCheckinTo] = useState("");
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [sortKey, setSortKey] = useState<SortKey>("calendar_date");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [selectedNight, setSelectedNight] = useState<SandwichNightRow | null>(null);
   const [revertingId, setRevertingId] = useState<string | null>(null);
   const [revertError, setRevertError] = useState<string | null>(null);
+
+  function handleSort(key: SortKey) {
+    if (key === sortKey) {
+      setSortDirection((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDirection("asc");
+    }
+  }
 
   const { from, to } = useMemo(() => buildPeriod(periodKey, customFrom, customTo), [periodKey, customFrom, customTo]);
 
@@ -91,11 +153,35 @@ export function Dashboard({ userEmail, onSignOut }: DashboardProps) {
   const { data: scanState } = useSandwichScanState();
 
   const filteredNights = useMemo(() => {
-    if (!nights) return [];
-    if (!search.trim()) return nights;
-    const term = search.toLowerCase();
-    return nights.filter((n) => (n.nome_interno ?? "").toLowerCase().includes(term));
-  }, [nights, search]);
+    let list = nights ?? [];
+    if (statusFilter !== "all") {
+      list = list.filter((n) => n.status === statusFilter);
+    }
+    if (checkinFrom) {
+      list = list.filter((n) => n.calendar_date >= checkinFrom);
+    }
+    if (checkinTo) {
+      list = list.filter((n) => n.calendar_date <= checkinTo);
+    }
+    if (search.trim()) {
+      const term = search.toLowerCase();
+      list = list.filter((n) => (n.nome_interno ?? "").toLowerCase().includes(term));
+    }
+    return list;
+  }, [nights, search, statusFilter, checkinFrom, checkinTo]);
+
+  const sortedNights = useMemo(() => {
+    const dir = sortDirection === "asc" ? 1 : -1;
+    return [...filteredNights].sort((a, b) => {
+      const av = a[sortKey];
+      const bv = b[sortKey];
+      if (av == null && bv == null) return 0;
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      if (typeof av === "number" && typeof bv === "number") return (av - bv) * dir;
+      return String(av).localeCompare(String(bv), "pt-BR") * dir;
+    });
+  }, [filteredNights, sortKey, sortDirection]);
 
   const kpis = useMemo(() => {
     const list = nights ?? [];
@@ -149,57 +235,113 @@ export function Dashboard({ userEmail, onSignOut }: DashboardProps) {
 
       <main className="mx-auto max-w-6xl space-y-4 p-6">
         {/* Filtros */}
-        <Card className="flex flex-wrap items-center gap-3 p-4">
-          <select
-            value={periodKey}
-            onChange={(e) => setPeriodKey(e.target.value as PeriodKey)}
-            className={inputClass}
-          >
-            <option value="hoje">Hoje</option>
-            <option value="7d">Últimos 7 dias</option>
-            <option value="30d">Último mês</option>
-            <option value="custom">Personalizado</option>
-          </select>
+        <Card className="space-y-3 p-4">
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-[var(--cd-muted)]">Data da alteração</label>
+              <div className="flex items-center gap-2">
+                <select
+                  value={periodKey}
+                  onChange={(e) => setPeriodKey(e.target.value as PeriodKey)}
+                  className={inputClass}
+                >
+                  <option value="hoje">Hoje</option>
+                  <option value="7d">Últimos 7 dias</option>
+                  <option value="30d">Último mês</option>
+                  <option value="custom">Personalizado</option>
+                </select>
 
-          {periodKey === "custom" && (
-            <>
+                {periodKey === "custom" && (
+                  <>
+                    <input
+                      type="date"
+                      value={customFrom}
+                      onChange={(e) => setCustomFrom(e.target.value)}
+                      className={inputClass}
+                    />
+                    <span className="text-sm text-[var(--cd-muted)]">até</span>
+                    <input
+                      type="date"
+                      value={customTo}
+                      onChange={(e) => setCustomTo(e.target.value)}
+                      className={inputClass}
+                    />
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-[var(--cd-muted)]">Check-in do pacote</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={checkinFrom}
+                  onChange={(e) => setCheckinFrom(e.target.value)}
+                  className={inputClass}
+                />
+                <span className="text-sm text-[var(--cd-muted)]">até</span>
+                <input
+                  type="date"
+                  value={checkinTo}
+                  onChange={(e) => setCheckinTo(e.target.value)}
+                  className={inputClass}
+                />
+                {(checkinFrom || checkinTo) && (
+                  <button
+                    onClick={() => {
+                      setCheckinFrom("");
+                      setCheckinTo("");
+                    }}
+                    className="text-[var(--cd-muted)] hover:text-[var(--cd-fg)]"
+                    title="Limpar"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-[var(--cd-muted)]">Status</label>
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+                className={inputClass}
+              >
+                <option value="all">Todos os status</option>
+                <option value="candidate">Pendente</option>
+                <option value="applied">Aplicada</option>
+                <option value="booked">Reservada</option>
+                <option value="reverted">Revertida</option>
+              </select>
+            </div>
+
+            <div className="flex min-w-[180px] flex-1 flex-col gap-1">
+              <label className="text-xs font-medium text-[var(--cd-muted)]">Imóvel</label>
               <input
-                type="date"
-                value={customFrom}
-                onChange={(e) => setCustomFrom(e.target.value)}
+                placeholder="Buscar imóvel..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
                 className={inputClass}
               />
-              <span className="text-sm text-[var(--cd-muted)]">até</span>
-              <input
-                type="date"
-                value={customTo}
-                onChange={(e) => setCustomTo(e.target.value)}
-                className={inputClass}
-              />
-            </>
-          )}
+            </div>
 
-          <input
-            placeholder="Buscar imóvel..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className={`max-w-xs flex-1 ${inputClass}`}
-          />
-
-          <button
-            onClick={refetch}
-            className="flex items-center gap-2 rounded-lg border border-[var(--cd-border)] px-3 py-2 text-sm text-[var(--cd-navy)] transition hover:bg-gray-50"
-          >
-            <RefreshCw className="h-4 w-4" />
-            Atualizar
-          </button>
+            <button
+              onClick={refetch}
+              className="flex items-center gap-2 rounded-lg border border-[var(--cd-border)] px-3 py-2 text-sm text-[var(--cd-navy)] transition hover:bg-gray-50"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Atualizar
+            </button>
+          </div>
 
           {scanState && (
-            <span className="ml-auto text-xs text-[var(--cd-muted)]">
+            <p className="text-xs text-[var(--cd-muted)]">
               {scanState.last_full_pass_at
                 ? `Última passada completa: ${new Date(scanState.last_full_pass_at).toLocaleString("pt-BR")}`
                 : "Varredura em andamento — ainda não completou uma passada hoje"}
-            </span>
+            </p>
           )}
         </Card>
 
@@ -253,7 +395,7 @@ export function Dashboard({ userEmail, onSignOut }: DashboardProps) {
                 <div key={i} className="h-10 w-full animate-pulse rounded bg-gray-100" />
               ))}
             </div>
-          ) : filteredNights.length === 0 ? (
+          ) : sortedNights.length === 0 ? (
             <div className="p-12 text-center text-[var(--cd-muted)]">
               <Sandwich className="mx-auto mb-3 h-10 w-10 opacity-30" />
               Nenhuma noite sanduíche no período selecionado.
@@ -263,16 +405,16 @@ export function Dashboard({ userEmail, onSignOut }: DashboardProps) {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-[var(--cd-border)] bg-gray-50 text-left text-xs text-[var(--cd-muted)]">
-                    <th className="px-4 py-2 font-medium">Imóvel</th>
-                    <th className="px-4 py-2 font-medium">Data</th>
-                    <th className="px-4 py-2 text-right font-medium">Base (2n)</th>
-                    <th className="px-4 py-2 text-right font-medium">Tarifa 1 noite</th>
-                    <th className="px-4 py-2 text-center font-medium">Status</th>
+                    <SortableHeader label="Imóvel" sortKey="nome_interno" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
+                    <SortableHeader label="Data" sortKey="calendar_date" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
+                    <SortableHeader label="Base (2n)" sortKey="base_rate_2n" activeKey={sortKey} direction={sortDirection} onSort={handleSort} align="right" />
+                    <SortableHeader label="Tarifa 1 noite" sortKey="applied_price" activeKey={sortKey} direction={sortDirection} onSort={handleSort} align="right" />
+                    <SortableHeader label="Status" sortKey="status" activeKey={sortKey} direction={sortDirection} onSort={handleSort} align="center" />
                     <th className="px-4 py-2 text-center font-medium">Ação</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredNights.map((n) => {
+                  {sortedNights.map((n) => {
                     const canRevert = n.status === "applied" || n.status === "booked";
                     return (
                       <tr
