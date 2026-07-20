@@ -23,6 +23,16 @@ export function displayIdentity(email: string): string {
   return email.endsWith(`@${SHARED_LOGIN_DOMAIN}`) ? email.split("@")[0] : email;
 }
 
+/**
+ * true pra contas de usuário compartilhado (ex.: "Cdhnoites"), false pra e-mails reais.
+ * Usado pra restringir ações sensíveis (ex.: mudar o multiplicador) a quem loga com e-mail
+ * próprio — a mesma regra já é reforçada por RLS no banco, isso aqui só evita mostrar um
+ * controle que o servidor vai rejeitar de qualquer forma.
+ */
+export function isSharedAccount(email: string): boolean {
+  return email.endsWith(`@${SHARED_LOGIN_DOMAIN}`);
+}
+
 // Usa o mesmo login (Supabase Auth) do Carpe Diem Insights — mesmo projeto, mesmas contas.
 export function useAuth() {
   const [state, setState] = useState<AuthState>({ session: null, user: null, loading: true });

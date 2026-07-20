@@ -10,11 +10,14 @@ import {
   ArrowUp,
   ArrowDown,
   ArrowUpDown,
+  Settings,
 } from "lucide-react";
 import logoWhite from "../assets/logo-white.png";
 import {
   useSandwichNights,
   useSandwichScanState,
+  useSandwichConfig,
+  updateSandwichMarkup,
   revertSandwichNight,
   type SandwichNightRow,
 } from "../hooks/useSandwichData";
@@ -134,10 +137,11 @@ const inputClass =
 
 interface DashboardProps {
   userEmail: string;
+  canEditMarkup: boolean;
   onSignOut: () => void;
 }
 
-export function Dashboard({ userEmail, onSignOut }: DashboardProps) {
+export function Dashboard({ userEmail, canEditMarkup, onSignOut }: DashboardProps) {
   const [periodKey, setPeriodKey] = useState<PeriodKey>("7d");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
@@ -151,6 +155,11 @@ export function Dashboard({ userEmail, onSignOut }: DashboardProps) {
   const [selectedNight, setSelectedNight] = useState<SandwichNightRow | null>(null);
   const [revertingId, setRevertingId] = useState<string | null>(null);
   const [revertError, setRevertError] = useState<string | null>(null);
+  const [showConfig, setShowConfig] = useState(false);
+  const [markupInput, setMarkupInput] = useState("");
+  const [markupSaving, setMarkupSaving] = useState(false);
+  const [markupError, setMarkupError] = useState<string | null>(null);
+  const [markupSaved, setMarkupSaved] = useState(false);
 
   function handleSort(key: SortKey) {
     if (key === sortKey) {
@@ -165,6 +174,7 @@ export function Dashboard({ userEmail, onSignOut }: DashboardProps) {
 
   const { data: nights, loading: nightsLoading, refetch } = useSandwichNights(from, to);
   const { data: scanState } = useSandwichScanState();
+  const { data: config, refetch: refetchConfig } = useSandwichConfig();
 
   const regionOptions = useMemo(() => {
     const codes = new Set((nights ?? []).map((n) => regionCodeOf(n.nome_interno)));
@@ -228,6 +238,32 @@ export function Dashboard({ userEmail, onSignOut }: DashboardProps) {
     refetch();
   }
 
+  function openConfig() {
+    setMarkupInput(config ? String(config.markup) : "");
+    setMarkupError(null);
+    setMarkupSaved(false);
+    setShowConfig(true);
+  }
+
+  async function handleSaveMarkup() {
+    const value = Number(markupInput.replace(",", "."));
+    if (!Number.isFinite(value) || value <= 0) {
+      setMarkupError("Informe um número maior que zero.");
+      return;
+    }
+    setMarkupSaving(true);
+    setMarkupError(null);
+    setMarkupSaved(false);
+    const res = await updateSandwichMarkup(value, userEmail);
+    setMarkupSaving(false);
+    if (!res.ok) {
+      setMarkupError(res.error ?? "Falha ao salvar.");
+      return;
+    }
+    setMarkupSaved(true);
+    refetchConfig();
+  }
+
   return (
     <div className="min-h-screen bg-[var(--cd-bg)] text-[var(--cd-fg)]">
       <header
@@ -235,7 +271,7 @@ export function Dashboard({ userEmail, onSignOut }: DashboardProps) {
         style={{ background: "var(--cd-navy)" }}
       >
         <div className="flex items-center gap-3">
-          <img src={logoWhite} alt="Carpediem Homes" className="h-6 w-auto" />
+          <img src={logoWhite} alt="Carpediem Homes" className="h-9 w-auto" />
           <span className="h-5 w-px bg-white/20" />
           <div className="flex items-center gap-2">
             <Sandwich className="h-4 w-4" style={{ color: "var(--cd-orange)" }} />
@@ -244,6 +280,13 @@ export function Dashboard({ userEmail, onSignOut }: DashboardProps) {
         </div>
         <div className="flex items-center gap-3 text-sm text-white/70">
           <span>{userEmail}</span>
+          <button
+            onClick={openConfig}
+            className="flex items-center gap-1 rounded-lg px-2 py-1 text-white/70 transition hover:bg-white/10 hover:text-white"
+            title="Configurações"
+          >
+            <Settings className="h-4 w-4" />
+          </button>
           <button
             onClick={onSignOut}
             className="flex items-center gap-1 rounded-lg px-2 py-1 text-white/70 transition hover:bg-white/10 hover:text-white"
@@ -556,6 +599,81 @@ export function Dashboard({ userEmail, onSignOut }: DashboardProps) {
                 <p className="text-xs text-[var(--cd-muted)]">Reserva #{selectedNight.reservation_id}</p>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {showConfig && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setShowConfig(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-xl border border-[var(--cd-border)] bg-white p-6 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-base font-semibold" style={{ color: "var(--cd-navy)" }}>
+                Multiplicador do pacote
+              </h3>
+              <button
+                onClick={() => setShowConfig(false)}
+                className="text-[var(--cd-muted)] hover:text-[var(--cd-fg)]"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <p className="mb-4 text-sm text-[var(--cd-muted)]">
+              A tarifa do pacote de 1 noite é sempre a maior diária base (mínimo de 2 noites)
+              vigente naquela data específica, multiplicada por este valor.
+            </p>
+
+            {canEditMarkup ? (
+              <>
+                <label className="mb-1.5 block text-xs font-medium text-[var(--cd-muted)]">
+                  Multiplicador (ex.: 1.6 = +60%)
+                </label>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={markupInput}
+                  onChange={(e) => setMarkupInput(e.target.value)}
+                  className={`w-full ${inputClass}`}
+                  placeholder="1.6"
+                />
+                {markupError && <p className="mt-2 text-sm text-red-600">{markupError}</p>}
+                {markupSaved && !markupError && (
+                  <p className="mt-2 text-sm text-emerald-600">Multiplicador atualizado.</p>
+                )}
+                <button
+                  onClick={handleSaveMarkup}
+                  disabled={markupSaving}
+                  className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold text-white transition disabled:opacity-50"
+                  style={{ background: "var(--cd-orange)" }}
+                >
+                  {markupSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  Salvar
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-[var(--cd-muted)]">Multiplicador atual</p>
+                <p className="text-2xl font-bold tabular-nums" style={{ color: "var(--cd-navy)" }}>
+                  {config ? `${config.markup}x` : "—"}
+                </p>
+                <p className="mt-3 text-xs text-[var(--cd-muted)]">
+                  Faça login com seu e-mail pessoal pra poder alterar esse valor.
+                </p>
+              </>
+            )}
+
+            {config?.updated_at && (
+              <p className="mt-4 text-xs text-[var(--cd-muted)]">
+                Última atualização: {new Date(config.updated_at).toLocaleString("pt-BR")}
+                {config.updated_by ? ` por ${config.updated_by}` : ""}
+              </p>
+            )}
           </div>
         </div>
       )}

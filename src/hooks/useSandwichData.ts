@@ -82,3 +82,39 @@ export function useSandwichScanState() {
     return (data ?? null) as unknown as SandwichScanState | null;
   }, []);
 }
+
+export interface SandwichConfig {
+  markup: number;
+  updated_at: string;
+  updated_by: string | null;
+}
+
+export function useSandwichConfig() {
+  return useAsync<SandwichConfig | null>(async () => {
+    const { data, error } = await supabase
+      .from("pricing_sandwich_config")
+      .select("markup, updated_at, updated_by")
+      .eq("id", 1)
+      .maybeSingle();
+    if (error) throw error;
+    return (data ?? null) as unknown as SandwichConfig | null;
+  }, []);
+}
+
+/**
+ * Atualiza o multiplicador. Protegido por RLS: só quem logou com e-mail real (não a conta
+ * compartilhada) tem permissão de UPDATE nessa tabela — se uma conta sem permissão chamar,
+ * o Supabase recusa e retorna erro (a UI já esconde o controle nesse caso, isso é defesa
+ * em profundidade, não a única barreira).
+ */
+export async function updateSandwichMarkup(
+  markup: number,
+  updatedBy: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const { error } = await supabase
+    .from("pricing_sandwich_config")
+    .update({ markup, updated_at: new Date().toISOString(), updated_by: updatedBy })
+    .eq("id", 1);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}

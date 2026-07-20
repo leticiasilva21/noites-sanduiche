@@ -1,4 +1,4 @@
-import { useAuth, displayIdentity } from "./hooks/useAuth";
+import { useAuth, displayIdentity, isSharedAccount } from "./hooks/useAuth";
 import { LoginPage } from "./pages/LoginPage";
 import { Dashboard } from "./pages/Dashboard";
 
@@ -17,5 +17,11 @@ export default function App() {
     return <LoginPage onSignIn={signIn} />;
   }
 
-  return <Dashboard userEmail={displayIdentity(user.email ?? "")} onSignOut={signOut} />;
+  return (
+    <Dashboard
+      userEmail={displayIdentity(user.email ?? "")}
+      canEditMarkup={!isSharedAccount(user.email ?? "")}
+      onSignOut={signOut}
+    />
+  );
 }
