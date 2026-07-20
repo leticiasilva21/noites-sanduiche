@@ -1,0 +1,19 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --cd-navy: #142952;
+  --cd-navy-dark: #0f1f3d;
+  --cd-orange: #f97015;
+  --cd-orange-dark: #dc5e0a;
+  --cd-bg: #f9fafb;
+  --cd-fg: #1b2232;
+  --cd-border: #e5e8ee;
+  --cd-muted: #6b7280;
+}
+
+body {
+  background: var(--cd-bg);
+  color: var(--cd-fg);
+}
