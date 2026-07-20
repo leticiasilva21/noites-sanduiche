@@ -38,14 +38,16 @@ export function LoginPage({ onSignIn }: Props) {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="mb-1.5 block text-xs font-medium text-[var(--cd-muted)]">E-mail</label>
+            <label className="mb-1.5 block text-xs font-medium text-[var(--cd-muted)]">Usuário</label>
             <input
-              type="email"
+              type="text"
+              autoCapitalize="none"
+              autoCorrect="off"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full rounded-lg border border-[var(--cd-border)] bg-white px-4 py-3 text-sm text-[var(--cd-fg)] placeholder-gray-400 outline-none focus:border-[var(--cd-orange)] focus:ring-1 focus:ring-[var(--cd-orange)]"
-              placeholder="seu@email.com"
+              placeholder="usuário"
             />
           </div>
 
@@ -63,7 +65,7 @@ export function LoginPage({ onSignIn }: Props) {
 
           {error && (
             <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">
-              {error === "Invalid login credentials" ? "E-mail ou senha inválidos." : error}
+              {error === "Invalid login credentials" ? "Usuário ou senha inválidos." : error}
             </div>
           )}
 
