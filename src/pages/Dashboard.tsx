@@ -21,8 +21,21 @@ import {
 
 type PeriodKey = "hoje" | "7d" | "30d" | "custom";
 type StatusFilter = "all" | SandwichNightRow["status"];
-type SortKey = "nome_interno" | "calendar_date" | "base_rate_2n" | "applied_price" | "status";
+type SortKey =
+  | "master_listing_id_short"
+  | "nome_interno"
+  | "calendar_date"
+  | "base_rate_2n"
+  | "applied_price"
+  | "status";
 type SortDirection = "asc" | "desc";
+
+/** Código de região/prédio embutido no nome interno (ex.: "PE-IPO-PG" em "PE-IPO-PG.CupeBeach.../Fulano"). */
+function regionCodeOf(nomeInterno: string | null): string {
+  if (!nomeInterno) return "—";
+  const idx = nomeInterno.indexOf(".");
+  return idx === -1 ? nomeInterno : nomeInterno.slice(0, idx);
+}
 
 function isoDate(d: Date): string {
   return d.toISOString().slice(0, 10);
@@ -132,6 +145,7 @@ export function Dashboard({ userEmail, onSignOut }: DashboardProps) {
   const [checkinTo, setCheckinTo] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [regionFilter, setRegionFilter] = useState<string>("all");
   const [sortKey, setSortKey] = useState<SortKey>("calendar_date");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [selectedNight, setSelectedNight] = useState<SandwichNightRow | null>(null);
@@ -152,10 +166,18 @@ export function Dashboard({ userEmail, onSignOut }: DashboardProps) {
   const { data: nights, loading: nightsLoading, refetch } = useSandwichNights(from, to);
   const { data: scanState } = useSandwichScanState();
 
+  const regionOptions = useMemo(() => {
+    const codes = new Set((nights ?? []).map((n) => regionCodeOf(n.nome_interno)));
+    return [...codes].sort((a, b) => a.localeCompare(b, "pt-BR"));
+  }, [nights]);
+
   const filteredNights = useMemo(() => {
     let list = nights ?? [];
     if (statusFilter !== "all") {
       list = list.filter((n) => n.status === statusFilter);
+    }
+    if (regionFilter !== "all") {
+      list = list.filter((n) => regionCodeOf(n.nome_interno) === regionFilter);
     }
     if (checkinFrom) {
       list = list.filter((n) => n.calendar_date >= checkinFrom);
@@ -168,7 +190,7 @@ export function Dashboard({ userEmail, onSignOut }: DashboardProps) {
       list = list.filter((n) => (n.nome_interno ?? "").toLowerCase().includes(term));
     }
     return list;
-  }, [nights, search, statusFilter, checkinFrom, checkinTo]);
+  }, [nights, search, statusFilter, regionFilter, checkinFrom, checkinTo]);
 
   const sortedNights = useMemo(() => {
     const dir = sortDirection === "asc" ? 1 : -1;
@@ -316,6 +338,22 @@ export function Dashboard({ userEmail, onSignOut }: DashboardProps) {
               </select>
             </div>
 
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-[var(--cd-muted)]">Região</label>
+              <select
+                value={regionFilter}
+                onChange={(e) => setRegionFilter(e.target.value)}
+                className={inputClass}
+              >
+                <option value="all">Todas as regiões</option>
+                {regionOptions.map((code) => (
+                  <option key={code} value={code}>
+                    {code}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <div className="flex min-w-[180px] flex-1 flex-col gap-1">
               <label className="text-xs font-medium text-[var(--cd-muted)]">Imóvel</label>
               <input
@@ -404,6 +442,7 @@ export function Dashboard({ userEmail, onSignOut }: DashboardProps) {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-[var(--cd-border)] bg-gray-50 text-left text-xs text-[var(--cd-muted)]">
+                    <SortableHeader label="Código" sortKey="master_listing_id_short" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
                     <SortableHeader label="Imóvel" sortKey="nome_interno" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
                     <SortableHeader label="Data" sortKey="calendar_date" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
                     <SortableHeader label="Base (2n)" sortKey="base_rate_2n" activeKey={sortKey} direction={sortDirection} onSort={handleSort} align="right" />
@@ -420,6 +459,9 @@ export function Dashboard({ userEmail, onSignOut }: DashboardProps) {
                         key={n.id}
                         className="border-b border-[var(--cd-border)] last:border-0"
                       >
+                        <td className="px-4 py-2.5 font-mono text-xs text-[var(--cd-muted)]">
+                          {n.master_listing_id_short ?? "—"}
+                        </td>
                         <td
                           className={`px-4 py-2.5 font-medium ${n.status === "booked" ? "cursor-pointer" : ""}`}
                           style={{ color: "var(--cd-navy)" }}
