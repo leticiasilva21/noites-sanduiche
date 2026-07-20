@@ -1,10 +1,10 @@
 import { useMemo, useState } from "react";
-import { Sandwich, RefreshCw, ExternalLink, LogOut, X } from "lucide-react";
+import { Sandwich, RefreshCw, ExternalLink, LogOut, X, Undo2, Loader2 } from "lucide-react";
 import logoWhite from "../assets/logo-white.png";
 import {
   useSandwichNights,
-  useSandwichApplyLog,
   useSandwichScanState,
+  revertSandwichNight,
   type SandwichNightRow,
 } from "../hooks/useSandwichData";
 
@@ -82,11 +82,12 @@ export function Dashboard({ userEmail, onSignOut }: DashboardProps) {
   const [customTo, setCustomTo] = useState("");
   const [search, setSearch] = useState("");
   const [selectedNight, setSelectedNight] = useState<SandwichNightRow | null>(null);
+  const [revertingId, setRevertingId] = useState<string | null>(null);
+  const [revertError, setRevertError] = useState<string | null>(null);
 
   const { from, to } = useMemo(() => buildPeriod(periodKey, customFrom, customTo), [periodKey, customFrom, customTo]);
 
   const { data: nights, loading: nightsLoading, refetch } = useSandwichNights(from, to);
-  const { data: log, loading: logLoading } = useSandwichApplyLog(from, to);
   const { data: scanState } = useSandwichScanState();
 
   const filteredNights = useMemo(() => {
@@ -107,6 +108,18 @@ export function Dashboard({ userEmail, onSignOut }: DashboardProps) {
   }, [nights]);
 
   const bookedNights = useMemo(() => (nights ?? []).filter((n) => n.status === "booked"), [nights]);
+
+  async function handleRevert(id: string) {
+    setRevertError(null);
+    setRevertingId(id);
+    const res = await revertSandwichNight(id);
+    setRevertingId(null);
+    if (!res.ok) {
+      setRevertError(res.error ?? "Falha ao reverter");
+      return;
+    }
+    refetch();
+  }
 
   return (
     <div className="min-h-screen bg-[var(--cd-bg)] text-[var(--cd-fg)]">
@@ -190,6 +203,12 @@ export function Dashboard({ userEmail, onSignOut }: DashboardProps) {
           )}
         </Card>
 
+        {revertError && (
+          <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600 ring-1 ring-inset ring-red-200">
+            Erro ao reverter: {revertError}
+          </div>
+        )}
+
         {/* KPIs */}
         <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
           <KpiCard label="Noites sanduíche no período" value={kpis.total} />
@@ -249,100 +268,55 @@ export function Dashboard({ userEmail, onSignOut }: DashboardProps) {
                     <th className="px-4 py-2 text-right font-medium">Base (2n)</th>
                     <th className="px-4 py-2 text-right font-medium">Tarifa 1 noite</th>
                     <th className="px-4 py-2 text-center font-medium">Status</th>
+                    <th className="px-4 py-2 text-center font-medium">Ação</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredNights.map((n) => (
-                    <tr
-                      key={n.id}
-                      className={`border-b border-[var(--cd-border)] last:border-0 ${n.status === "booked" ? "cursor-pointer hover:bg-gray-50" : ""}`}
-                      onClick={() => n.status === "booked" && setSelectedNight(n)}
-                    >
-                      <td className="px-4 py-2.5 font-medium" style={{ color: "var(--cd-navy)" }}>
-                        {n.nome_interno}
-                      </td>
-                      <td className="px-4 py-2.5 text-[var(--cd-muted)]">{n.calendar_date}</td>
-                      <td className="px-4 py-2.5 text-right tabular-nums text-[var(--cd-muted)]">
-                        {brl(n.base_rate_2n)}
-                      </td>
-                      <td className="px-4 py-2.5 text-right tabular-nums font-medium text-[var(--cd-fg)]">
-                        {brl(n.applied_price)}
-                      </td>
-                      <td className="px-4 py-2.5 text-center">
-                        <StatusBadge status={n.status} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </Card>
-
-        {/* Histórico de automações */}
-        <Card className="overflow-hidden">
-          <div className="border-b border-[var(--cd-border)] px-4 py-3">
-            <h3 className="text-sm font-semibold" style={{ color: "var(--cd-navy)" }}>
-              Alterações feitas via API
-            </h3>
-          </div>
-          {logLoading ? (
-            <div className="space-y-2 p-4">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="h-10 w-full animate-pulse rounded bg-gray-100" />
-              ))}
-            </div>
-          ) : !log || log.length === 0 ? (
-            <div className="p-8 text-center text-sm text-[var(--cd-muted)]">
-              Nenhuma alteração registrada no período.
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-[var(--cd-border)] bg-gray-50 text-left text-xs text-[var(--cd-muted)]">
-                    <th className="px-4 py-2 font-medium">Quando</th>
-                    <th className="px-4 py-2 font-medium">Data da noite</th>
-                    <th className="px-4 py-2 font-medium">Ação</th>
-                    <th className="px-4 py-2 text-right font-medium">Antes</th>
-                    <th className="px-4 py-2 text-right font-medium">Depois</th>
-                    <th className="px-4 py-2 text-center font-medium">Resultado</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {log.map((l) => (
-                    <tr key={l.id} className="border-b border-[var(--cd-border)] last:border-0">
-                      <td className="whitespace-nowrap px-4 py-2.5 text-xs text-[var(--cd-muted)]">
-                        {new Date(l.created_at).toLocaleString("pt-BR")}
-                      </td>
-                      <td className="px-4 py-2.5 text-[var(--cd-muted)]">{l.calendar_date}</td>
-                      <td className="px-4 py-2.5">
-                        <span className="rounded-full border border-[var(--cd-border)] px-2 py-0.5 text-xs text-[var(--cd-navy)]">
-                          {l.action === "apply" ? "Aplicar" : "Reverter"}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2.5 text-right tabular-nums text-[var(--cd-muted)]">
-                        {brl(l.price_before)}
-                      </td>
-                      <td className="px-4 py-2.5 text-right tabular-nums text-[var(--cd-fg)]">
-                        {brl(l.price_after)}
-                      </td>
-                      <td className="px-4 py-2.5 text-center">
-                        {l.ok ? (
-                          <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700 ring-1 ring-inset ring-emerald-200">
-                            OK
-                          </span>
-                        ) : (
-                          <span
-                            className="rounded-full bg-red-50 px-2.5 py-0.5 text-xs font-medium text-red-600 ring-1 ring-inset ring-red-200"
-                            title={l.error ?? ""}
-                          >
-                            Falhou
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                  {filteredNights.map((n) => {
+                    const canRevert = n.status === "applied" || n.status === "booked";
+                    return (
+                      <tr
+                        key={n.id}
+                        className="border-b border-[var(--cd-border)] last:border-0"
+                      >
+                        <td
+                          className={`px-4 py-2.5 font-medium ${n.status === "booked" ? "cursor-pointer" : ""}`}
+                          style={{ color: "var(--cd-navy)" }}
+                          onClick={() => n.status === "booked" && setSelectedNight(n)}
+                        >
+                          {n.nome_interno}
+                        </td>
+                        <td className="px-4 py-2.5 text-[var(--cd-muted)]">{n.calendar_date}</td>
+                        <td className="px-4 py-2.5 text-right tabular-nums text-[var(--cd-muted)]">
+                          {brl(n.base_rate_2n)}
+                        </td>
+                        <td className="px-4 py-2.5 text-right tabular-nums font-medium text-[var(--cd-fg)]">
+                          {brl(n.applied_price)}
+                        </td>
+                        <td className="px-4 py-2.5 text-center">
+                          <StatusBadge status={n.status} />
+                        </td>
+                        <td className="px-4 py-2.5 text-center">
+                          {canRevert ? (
+                            <button
+                              onClick={() => handleRevert(n.id)}
+                              disabled={revertingId === n.id}
+                              className="inline-flex items-center gap-1 rounded-lg border border-[var(--cd-border)] px-2.5 py-1 text-xs text-[var(--cd-navy)] transition hover:bg-gray-50 disabled:opacity-50"
+                            >
+                              {revertingId === n.id ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <Undo2 className="h-3.5 w-3.5" />
+                              )}
+                              Reverter
+                            </button>
+                          ) : (
+                            <span className="text-xs text-gray-300">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

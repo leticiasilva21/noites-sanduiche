@@ -19,19 +19,6 @@ export interface SandwichNightRow {
   reservation_channel: string | null;
 }
 
-export interface SandwichApplyLogRow {
-  id: string;
-  sandwich_night_id: string | null;
-  master_listing_id: string;
-  calendar_date: string;
-  action: "apply" | "revert";
-  price_before: number | null;
-  price_after: number | null;
-  ok: boolean;
-  error: string | null;
-  created_at: string;
-}
-
 export interface SandwichScanState {
   next_offset: number;
   last_full_pass_at: string | null;
@@ -74,17 +61,14 @@ export function useSandwichNights(from: string, to: string) {
   }, [from, to]);
 }
 
-export function useSandwichApplyLog(from: string, to: string) {
-  return useAsync<SandwichApplyLogRow[]>(async () => {
-    const { data, error } = await supabase
-      .from("pricing_sandwich_apply_log")
-      .select("*")
-      .gte("created_at", `${from}T00:00:00`)
-      .lte("created_at", `${to}T23:59:59`)
-      .order("created_at", { ascending: false });
-    if (error) throw error;
-    return (data ?? []) as unknown as SandwichApplyLogRow[];
-  }, [from, to]);
+/** Dispara a reversão manual (botão "Reverter") — chama a edge function, que confirma na Stays. */
+export async function revertSandwichNight(id: string): Promise<{ ok: boolean; error?: string }> {
+  const { data, error } = await supabase.functions.invoke("pricing-sandwich-nights", {
+    body: { action: "manual_revert", id },
+  });
+  if (error) return { ok: false, error: error.message };
+  if (data?.error) return { ok: false, error: data.error };
+  return { ok: true };
 }
 
 export function useSandwichScanState() {
