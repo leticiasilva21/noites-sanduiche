@@ -184,16 +184,15 @@ export function Dashboard({ userEmail, onSignOut }: DashboardProps) {
   }, [filteredNights, sortKey, sortDirection]);
 
   const kpis = useMemo(() => {
-    const list = nights ?? [];
     return {
-      total: list.length,
-      applied: list.filter((n) => n.status === "applied").length,
-      reverted: list.filter((n) => n.status === "reverted").length,
-      booked: list.filter((n) => n.status === "booked").length,
+      total: filteredNights.length,
+      applied: filteredNights.filter((n) => n.status === "applied").length,
+      reverted: filteredNights.filter((n) => n.status === "reverted").length,
+      booked: filteredNights.filter((n) => n.status === "booked").length,
     };
-  }, [nights]);
+  }, [filteredNights]);
 
-  const bookedNights = useMemo(() => (nights ?? []).filter((n) => n.status === "booked"), [nights]);
+  const bookedNights = useMemo(() => filteredNights.filter((n) => n.status === "booked"), [filteredNights]);
 
   async function handleRevert(id: string) {
     setRevertError(null);
