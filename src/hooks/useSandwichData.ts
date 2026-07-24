@@ -48,17 +48,67 @@ function useAsync<T>(fn: () => Promise<T>, deps: unknown[]) {
   return { data, loading, refetch: () => setReloadKey((k) => k + 1) };
 }
 
+async function fetchNights(from: string, to: string): Promise<SandwichNightRow[]> {
+  const { data, error } = await supabase
+    .from("pricing_sandwich_nights")
+    .select("*")
+    .gte("updated_at", `${from}T00:00:00`)
+    .lte("updated_at", `${to}T23:59:59`)
+    .order("updated_at", { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as unknown as SandwichNightRow[];
+}
+
+/**
+ * Além da busca inicial, assina mudanças em tempo real (Supabase Realtime) na tabela — assim
+ * os cartões de resumo e a tabela reagem na hora quando a automação aplica/reverte um pacote,
+ * sem precisar clicar em "Atualizar". Requer a tabela publicada em `supabase_realtime`.
+ */
 export function useSandwichNights(from: string, to: string) {
-  return useAsync<SandwichNightRow[]>(async () => {
-    const { data, error } = await supabase
-      .from("pricing_sandwich_nights")
-      .select("*")
-      .gte("updated_at", `${from}T00:00:00`)
-      .lte("updated_at", `${to}T23:59:59`)
-      .order("updated_at", { ascending: false });
-    if (error) throw error;
-    return (data ?? []) as unknown as SandwichNightRow[];
-  }, [from, to]);
+  const [data, setData] = useState<SandwichNightRow[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    fetchNights(from, to).then((rows) => {
+      if (!cancelled) {
+        setData(rows);
+        setLoading(false);
+      }
+    });
+
+    const channel = supabase
+      .channel("pricing_sandwich_nights_live")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "pricing_sandwich_nights" },
+        (payload) => {
+          setData((prev) => {
+            const list = prev ? [...prev] : [];
+            if (payload.eventType === "DELETE") {
+              const oldId = (payload.old as { id?: string })?.id;
+              return list.filter((r) => r.id !== oldId);
+            }
+            const row = payload.new as unknown as SandwichNightRow;
+            const idx = list.findIndex((r) => r.id === row.id);
+            if (idx >= 0) list[idx] = row;
+            else list.unshift(row);
+            return list;
+          });
+        },
+      )
+      .subscribe();
+
+    return () => {
+      cancelled = true;
+      supabase.removeChannel(channel);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [from, to, reloadKey]);
+
+  return { data, loading, refetch: () => setReloadKey((k) => k + 1) };
 }
 
 /** Dispara a reversão manual (botão "Reverter") — chama a edge function, que confirma na Stays. */

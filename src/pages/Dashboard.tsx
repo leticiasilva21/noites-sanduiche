@@ -432,6 +432,10 @@ export function Dashboard({ userEmail, canEditMarkup, onSignOut }: DashboardProp
         )}
 
         {/* KPIs */}
+        <div className="flex items-center gap-1.5 text-xs text-[var(--cd-muted)]">
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+          Atualiza em tempo real
+        </div>
         <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
           <KpiCard label="Noites sanduíche no período" value={kpis.total} />
           <KpiCard label="Pacotes aplicados" value={kpis.applied} accent />
