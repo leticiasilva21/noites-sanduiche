@@ -216,11 +216,15 @@ export function Dashboard({ userEmail, canEditMarkup, onSignOut }: DashboardProp
   }, [filteredNights, sortKey, sortDirection]);
 
   const kpis = useMemo(() => {
+    const bookedRows = filteredNights.filter((n) => n.status === "booked");
     return {
       total: filteredNights.length,
       applied: filteredNights.filter((n) => n.status === "applied").length,
       reverted: filteredNights.filter((n) => n.status === "reverted").length,
-      booked: filteredNights.filter((n) => n.status === "booked").length,
+      booked: bookedRows.length,
+      // Receita real das noites que efetivamente venderam — não confundir com applied_price
+      // (tarifa do pacote), que é só o preço ofertado, não necessariamente o valor faturado.
+      revenue: bookedRows.reduce((sum, n) => sum + (n.reservation_price ?? 0), 0),
     };
   }, [filteredNights]);
 
@@ -436,11 +440,12 @@ export function Dashboard({ userEmail, canEditMarkup, onSignOut }: DashboardProp
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
           Atualiza em tempo real
         </div>
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
           <KpiCard label="Noites sanduíche no período" value={kpis.total} />
           <KpiCard label="Pacotes aplicados" value={kpis.applied} accent />
           <KpiCard label="Revertidos" value={kpis.reverted} />
           <KpiCard label="Reservadas (venderam a noite avulsa)" value={kpis.booked} />
+          <KpiCard label="Receita total gerada" value={brl(kpis.revenue)} accent />
         </div>
 
         {/* Reservas — clicável */}
