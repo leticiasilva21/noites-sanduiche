@@ -6,6 +6,8 @@ interface AuthState {
   session: Session | null;
   user: User | null;
   loading: boolean;
+  /** true quando o usuário chegou pelo link de "recuperar senha" e ainda não definiu a nova. */
+  recovering: boolean;
 }
 
 // Domínio sintético p/ contas "usuário" (sem e-mail real) compartilháveis, ex.: conta de
@@ -35,17 +37,27 @@ export function isSharedAccount(email: string): boolean {
 
 // Usa o mesmo login (Supabase Auth) do Carpe Diem Insights — mesmo projeto, mesmas contas.
 export function useAuth() {
-  const [state, setState] = useState<AuthState>({ session: null, user: null, loading: true });
+  const [state, setState] = useState<AuthState>({
+    session: null,
+    user: null,
+    loading: true,
+    recovering: false,
+  });
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setState({ session, user: session?.user ?? null, loading: false });
+      setState((prev) => ({ ...prev, session, user: session?.user ?? null, loading: false }));
     });
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setState({ session, user: session?.user ?? null, loading: false });
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      setState((prev) => ({
+        session,
+        user: session?.user ?? null,
+        loading: false,
+        recovering: event === "PASSWORD_RECOVERY" ? true : event === "SIGNED_OUT" ? false : prev.recovering,
+      }));
     });
 
     return () => subscription.unsubscribe();
@@ -63,5 +75,19 @@ export function useAuth() {
     await supabase.auth.signOut();
   }
 
-  return { ...state, signIn, signOut };
+  /** Manda o e-mail com o link de redefinição; o link volta pra este site (ver PASSWORD_RECOVERY acima). */
+  async function requestPasswordReset(email: string) {
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: `${window.location.origin}${import.meta.env.BASE_URL}`,
+    });
+    return error?.message ?? null;
+  }
+
+  async function updatePassword(password: string) {
+    const { error } = await supabase.auth.updateUser({ password });
+    if (!error) setState((prev) => ({ ...prev, recovering: false }));
+    return error?.message ?? null;
+  }
+
+  return { ...state, signIn, signOut, requestPasswordReset, updatePassword };
 }

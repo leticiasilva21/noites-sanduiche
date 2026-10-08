@@ -1,9 +1,10 @@
 import { useAuth, displayIdentity, isSharedAccount } from "./hooks/useAuth";
 import { LoginPage } from "./pages/LoginPage";
+import { ResetPasswordPage } from "./pages/ResetPasswordPage";
 import { Dashboard } from "./pages/Dashboard";
 
 export default function App() {
-  const { user, loading, signIn, signOut } = useAuth();
+  const { user, loading, recovering, signIn, signOut, requestPasswordReset, updatePassword } = useAuth();
 
   if (loading) {
     return (
@@ -14,7 +15,11 @@ export default function App() {
   }
 
   if (!user) {
-    return <LoginPage onSignIn={signIn} />;
+    return <LoginPage onSignIn={signIn} onRequestReset={requestPasswordReset} />;
+  }
+
+  if (recovering) {
+    return <ResetPasswordPage onUpdatePassword={updatePassword} onCancel={signOut} />;
   }
 
   return (

@@ -1,15 +1,24 @@
 import { useState } from "react";
-import logoWhite from "../assets/logo-white.png";
+import { AuthCard, inputClass, PrimaryButton } from "../components/AuthCard";
 
 interface Props {
   onSignIn: (email: string, password: string) => Promise<string | null>;
+  onRequestReset: (email: string) => Promise<string | null>;
 }
 
-export function LoginPage({ onSignIn }: Props) {
+export function LoginPage({ onSignIn, onRequestReset }: Props) {
+  const [mode, setMode] = useState<"login" | "forgot">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  function switchMode(next: "login" | "forgot") {
+    setMode(next);
+    setError(null);
+    setNotice(null);
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -20,67 +29,103 @@ export function LoginPage({ onSignIn }: Props) {
     setLoading(false);
   }
 
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-[var(--cd-bg)] px-4">
-      <div className="w-full max-w-sm rounded-2xl border border-[var(--cd-border)] bg-white p-8 shadow-sm">
-        <div className="mb-8 text-center">
-          <div
-            className="mx-auto mb-4 flex h-16 w-40 items-center justify-center rounded-xl"
-            style={{ background: "var(--cd-navy)" }}
-          >
-            <img src={logoWhite} alt="Carpediem Homes" className="h-8 w-auto" />
-          </div>
-          <h1 className="text-xl font-bold" style={{ color: "var(--cd-navy)" }}>
-            Noites Sanduíche
-          </h1>
-          <p className="mt-1 text-sm text-[var(--cd-muted)]">Acesso restrito ao time interno</p>
-        </div>
+  async function handleReset(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setNotice(null);
+    // Contas compartilhadas (usuário sem @) usam domínio sintético e não recebem e-mail.
+    if (!email.includes("@")) {
+      setError("Informe o seu e-mail. Contas de usuário compartilhado não têm recuperação por e-mail — fale com o administrador.");
+      return;
+    }
+    setLoading(true);
+    const err = await onRequestReset(email);
+    setLoading(false);
+    if (err) setError(err);
+    else setNotice("Se esse e-mail tiver acesso, você vai receber um link para criar uma nova senha. Confira também o spam.");
+  }
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+  if (mode === "forgot") {
+    return (
+      <AuthCard subtitle="Recuperar senha">
+        <form onSubmit={handleReset} className="space-y-4">
           <div>
-            <label className="mb-1.5 block text-xs font-medium text-[var(--cd-muted)]">Usuário</label>
+            <label className="mb-1.5 block text-xs font-medium text-[var(--cd-muted)]">E-mail</label>
             <input
-              type="text"
+              type="email"
               autoCapitalize="none"
               autoCorrect="off"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-lg border border-[var(--cd-border)] bg-white px-4 py-3 text-sm text-[var(--cd-fg)] placeholder-gray-400 outline-none focus:border-[var(--cd-orange)] focus:ring-1 focus:ring-[var(--cd-orange)]"
-              placeholder="usuário"
+              className={inputClass}
+              placeholder="voce@carpediemhomes.com.br"
             />
           </div>
 
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-[var(--cd-muted)]">Senha</label>
-            <input
-              type="password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-lg border border-[var(--cd-border)] bg-white px-4 py-3 text-sm text-[var(--cd-fg)] placeholder-gray-400 outline-none focus:border-[var(--cd-orange)] focus:ring-1 focus:ring-[var(--cd-orange)]"
-              placeholder="••••••••"
-            />
-          </div>
+          {error && <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">{error}</div>}
+          {notice && <div className="rounded-lg bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{notice}</div>}
 
-          {error && (
-            <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">
-              {error === "Invalid login credentials" ? "Usuário ou senha inválidos." : error}
-            </div>
-          )}
+          <PrimaryButton disabled={loading}>{loading ? "Enviando..." : "Enviar link de recuperação"}</PrimaryButton>
 
           <button
-            type="submit"
-            disabled={loading}
-            className="w-full rounded-lg py-3 text-sm font-semibold text-white transition disabled:opacity-50"
-            style={{ background: "var(--cd-orange)" }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--cd-orange-dark)")}
-            onMouseLeave={(e) => (e.currentTarget.style.background = "var(--cd-orange)")}
+            type="button"
+            onClick={() => switchMode("login")}
+            className="w-full text-center text-xs font-medium text-[var(--cd-muted)] hover:underline"
           >
-            {loading ? "Entrando..." : "Entrar"}
+            Voltar para o login
           </button>
         </form>
-      </div>
-    </div>
+      </AuthCard>
+    );
+  }
+
+  return (
+    <AuthCard subtitle="Acesso restrito ao time interno">
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label className="mb-1.5 block text-xs font-medium text-[var(--cd-muted)]">Usuário</label>
+          <input
+            type="text"
+            autoCapitalize="none"
+            autoCorrect="off"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className={inputClass}
+            placeholder="usuário"
+          />
+        </div>
+
+        <div>
+          <label className="mb-1.5 block text-xs font-medium text-[var(--cd-muted)]">Senha</label>
+          <input
+            type="password"
+            required
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className={inputClass}
+            placeholder="••••••••"
+          />
+        </div>
+
+        {error && (
+          <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">
+            {error === "Invalid login credentials" ? "Usuário ou senha inválidos." : error}
+          </div>
+        )}
+
+        <PrimaryButton disabled={loading}>{loading ? "Entrando..." : "Entrar"}</PrimaryButton>
+
+        <button
+          type="button"
+          onClick={() => switchMode("forgot")}
+          className="w-full text-center text-xs font-medium hover:underline"
+          style={{ color: "var(--cd-orange)" }}
+        >
+          Esqueci minha senha
+        </button>
+      </form>
+    </AuthCard>
   );
 }
